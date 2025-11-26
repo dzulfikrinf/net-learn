@@ -7,106 +7,180 @@ use App\Models\User;
 use App\Models\Week;
 use App\Models\Lesson;
 use App\Models\Module;
+use App\Models\UserProgress;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class ContentSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. BUAT USER UNTUK TEST LOGIN
-        // Nanti Anda login pakai email & password ini
+        // --- 1. BERSIHKAN DATABASE DULU (Agar tidak numpuk) ---
+        // Kita matikan dulu cek foreign key biar bisa hapus paksa
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+
+        // Kosongkan tabel-tabel ini
+        UserProgress::truncate();
+        Module::truncate();
+        Lesson::truncate();
+        Week::truncate();
+        User::truncate();
+
+        // Nyalakan lagi cek foreign key
+        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+        // --- 2. BUAT USER ---
         User::create([
-            'name' => 'Mahasiswa Test',
+            'name' => 'Pak Guru',
+            'email' => 'guru@netlearn.com',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'xp' => 9999
+        ]);
+
+        User::create([
+            'name' => 'Siswa Test',
             'email' => 'admin@netlearn.com',
             'password' => Hash::make('password'),
             'role' => 'student',
             'xp' => 0
         ]);
 
-        // 2. BUAT MINGGU 1 (FONDASI)
+        // ==========================================
+        // MINGGU 1: FONDASI JARINGAN
+        // ==========================================
         $week1 = Week::create([
-            'title' => 'Minggu 1: Fondasi Jaringan',
-            'description' => 'Memahami konsep dasar IP Address dan Biner.',
+            'title' => 'Minggu 1: Fondasi & Biner',
+            'description' => 'Memahami bahasa mesin dan konsep dasar pengalamatan.',
             'week_number' => 1,
-            'is_active' => true, // Minggu 1 langsung aktif
+            'is_active' => true,
         ]);
 
-            // Level 1.1: Pengenalan IP
-            $lesson1 = Lesson::create([
-                'week_id' => $week1->id,
-                'title' => 'Apa itu IP Address?',
-                'slug' => 'pengenalan-ip',
-                'order' => 1,
-                'xp_reward' => 100
-            ]);
+            // --- LEVEL 1.1: ANATOMI IP ADDRESS ---
+            $l1 = Lesson::create(['week_id' => $week1->id, 'title' => 'Anatomi IPv4', 'slug' => 'anatomi-ipv4', 'order' => 1, 'xp_reward' => 100]);
 
-                // Isi (Modul) Level 1.1
-                Module::create([
-                    'lesson_id' => $lesson1->id,
-                    'type' => 'text',
-                    'content' => 'IP Address ibarat alamat rumah dalam dunia internet...',
-                    'order' => 1
-                ]);
+                Module::create(['lesson_id' => $l1->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Ibarat Alamat Rumah 🏠</h3><p>Bayangkan paket data seperti surat. Agar sampai, surat butuh alamat unik. Di komputer, alamat ini disebut <strong>IP Address</strong>.</p>']);
 
-                Module::create([
-                    'lesson_id' => $lesson1->id,
-                    'type' => 'quiz',
-                    'content' => 'Kuis Singkat',
-                    'data' => json_encode([
-                        'question' => 'Berapa bit panjang IPv4?',
-                        'options' => ['32 bit', '128 bit', '64 bit'],
-                        'answer' => '32 bit'
-                    ]),
-                    'order' => 2
-                ]);
+                Module::create(['lesson_id' => $l1->id, 'type' => 'text', 'order' => 2, 'content' =>
+                    '<h3>Struktur 32 Bit 🧬</h3><p>IPv4 terdiri dari 4 blok angka (oktet) yang dipisahkan titik. Contoh: <code>192.168.10.1</code>. Total panjangnya adalah 32 bit.</p>']);
 
-            // Level 1.2: Konversi Biner
-            Lesson::create([
-                'week_id' => $week1->id,
-                'title' => 'Matematika Biner',
-                'slug' => 'biner-dasar',
-                'order' => 2,
-                'xp_reward' => 150
-            ]);
+                Module::create(['lesson_id' => $l1->id, 'type' => 'quiz', 'order' => 3, 'data' => json_encode([
+                    'question' => 'Berapa total panjang bit pada alamat IPv4?',
+                    'options' => ['16 bit', '32 bit', '64 bit', '128 bit'],
+                    'answer' => '32 bit'
+                ])]);
 
-        // 3. BUAT MINGGU 2 (FLSM)
+            // --- LEVEL 1.2: MATEMATIKA BINER ---
+            $l2 = Lesson::create(['week_id' => $week1->id, 'title' => 'Matematika Biner', 'slug' => 'matematika-biner', 'order' => 2, 'xp_reward' => 150]);
+
+                Module::create(['lesson_id' => $l2->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Bahasa Mesin 0 dan 1 🤖</h3><p>Komputer tidak paham angka 9 atau huruf A. Mereka hanya paham arus listrik: <strong>Mati (0)</strong> dan <strong>Hidup (1)</strong>.</p>']);
+
+                Module::create(['lesson_id' => $l2->id, 'type' => 'text', 'order' => 2, 'content' =>
+                    '<h3>Tabel Sakti Konversi 📊</h3><p>Hafalkan urutan nilai bit ini: <strong>128, 64, 32, 16, 8, 4, 2, 1</strong>. Jika bit bernilai 1, jumlahkan angkanya.</p>']);
+
+                Module::create(['lesson_id' => $l2->id, 'type' => 'quiz', 'order' => 3, 'data' => json_encode([
+                    'question' => 'Konversi biner 10000000 ke desimal adalah...',
+                    'options' => ['1', '128', '255', '192'],
+                    'answer' => '128'
+                ])]);
+
+            // --- LEVEL 1.3: KELAS IP ---
+            $l3 = Lesson::create(['week_id' => $week1->id, 'title' => 'Kelas IP Address', 'slug' => 'kelas-ip', 'order' => 3, 'xp_reward' => 150]);
+
+                Module::create(['lesson_id' => $l3->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Kelas A, B, dan C 🏫</h3><p>IP dibagi menjadi kelas berdasarkan oktet pertamanya. <strong>Kelas C</strong> (192-223) paling sering dipakai untuk LAN kecil.</p>']);
+
+                Module::create(['lesson_id' => $l3->id, 'type' => 'quiz', 'order' => 2, 'data' => json_encode([
+                    'question' => 'IP 192.168.100.1 termasuk kelas apa?',
+                    'options' => ['Kelas A', 'Kelas B', 'Kelas C', 'Kelas D'],
+                    'answer' => 'Kelas C'
+                ])]);
+
+
+        // ==========================================
+        // MINGGU 2: CIDR & FLSM
+        // ==========================================
         $week2 = Week::create([
-            'title' => 'Minggu 2: Pembagian Subnet (FLSM)',
-            'description' => 'Membagi jaringan dengan metode Fixed Length.',
+            'title' => 'Minggu 2: Subnetting Dasar',
+            'description' => 'Mempelajari notasi CIDR dan pembagian FLSM.',
             'week_number' => 2,
-            'is_active' => false, // Masih terkunci
+            'is_active' => true,
         ]);
 
-            Lesson::create([
-                'week_id' => $week2->id,
-                'title' => 'Konsep CIDR (/24, /16)',
-                'slug' => 'konsep-cidr',
-                'order' => 1,
-                'xp_reward' => 200
-            ]);
+            // --- LEVEL 2.1: NOTASI CIDR ---
+            $l4 = Lesson::create(['week_id' => $week2->id, 'title' => 'Rahasia Garis Miring', 'slug' => 'konsep-cidr', 'order' => 1, 'xp_reward' => 200]);
 
-        // 4. BUAT MINGGU 3 (VLSM - FINAL BOSS)
+                Module::create(['lesson_id' => $l4->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Apa itu CIDR? 🤔</h3><p>CIDR (Classless Inter-Domain Routing) adalah cara menulis subnet mask dengan ringkas. Contoh: <code>/24</code>.</p>']);
+
+                Module::create(['lesson_id' => $l4->id, 'type' => 'text', 'order' => 2, 'content' =>
+                    '<h3>Tabel Prefix Umum</h3><ul class="list-disc ml-5"><li>/8 = 255.0.0.0</li><li>/16 = 255.255.0.0</li><li>/24 = 255.255.255.0</li></ul>']);
+
+                Module::create(['lesson_id' => $l4->id, 'type' => 'quiz', 'order' => 3, 'data' => json_encode([
+                    'question' => 'Subnet mask untuk /24 adalah...',
+                    'options' => ['255.0.0.0', '255.255.0.0', '255.255.255.0', '255.255.255.255'],
+                    'answer' => '255.255.255.0'
+                ])]);
+
+            // --- LEVEL 2.2: KONSEP FLSM ---
+            $l5 = Lesson::create(['week_id' => $week2->id, 'title' => 'Logika FLSM', 'slug' => 'logika-flsm', 'order' => 2, 'xp_reward' => 200]);
+
+                Module::create(['lesson_id' => $l5->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Membagi Kue Sama Rata 🍰</h3><p><strong>FLSM (Fixed Length Subnet Mask)</strong> artinya semua subnet memiliki ukuran yang SAMA. Tidak boleh ada yang besar kecil.</p>']);
+
+                Module::create(['lesson_id' => $l5->id, 'type' => 'text', 'order' => 2, 'content' =>
+                    '<h3>Rumus Penting 🧮</h3><p>Jumlah Subnet = 2^n (n = bit yang dipinjam).<br>Jumlah Host = 2^h - 2 (h = sisa bit host).</p>']);
+
+            // --- LEVEL 2.3: SIMULATOR FLSM ---
+            $l6 = Lesson::create(['week_id' => $week2->id, 'title' => 'Praktek Hitung FLSM', 'slug' => 'praktek-flsm', 'order' => 3, 'xp_reward' => 300]);
+
+                Module::create(['lesson_id' => $l6->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Waktunya Mencoba! 🛠️</h3><p>Di slide selanjutnya, gunakan alat visualisasi FLSM untuk melihat bagaimana satu jaringan besar dipotong menjadi bagian-bagian kecil yang sama rata.</p>']);
+
+                // Gunakan Simulator (Mode FLSM nanti dipilih di wrapper)
+                Module::create(['lesson_id' => $l6->id, 'type' => 'simulator_vlsm', 'order' => 2, 'content' => 'Simulator Area']);
+
+
+        // ==========================================
+        // MINGGU 3: VLSM & EFISIENSI
+        // ==========================================
         $week3 = Week::create([
             'title' => 'Minggu 3: Efisiensi VLSM',
-            'description' => 'Studi kasus tingkat lanjut.',
+            'description' => 'Teknik tingkat lanjut untuk efisiensi IP.',
             'week_number' => 3,
-            'is_active' => false, // Masih terkunci
+            'is_active' => true,
         ]);
 
-            // Level VLSM Simulator (Tempat kode React Flow Anda nanti)
-            $lessonVlsm = Lesson::create([
-                'week_id' => $week3->id,
-                'title' => 'Simulator VLSM',
-                'slug' => 'simulator-vlsm',
-                'order' => 5, // Level terakhir
-                'xp_reward' => 500
-            ]);
+            // --- LEVEL 3.1: MASALAH FLSM ---
+            $l7 = Lesson::create(['week_id' => $week3->id, 'title' => 'Kenapa FLSM Boros?', 'slug' => 'masalah-flsm', 'order' => 1, 'xp_reward' => 200]);
 
-            Module::create([
-                'lesson_id' => $lessonVlsm->id,
-                'type' => 'simulator_vlsm', // Tipe khusus
-                'content' => 'Gunakan alat di samping untuk memecahkan masalah.',
-                'order' => 1
-            ]);
+                Module::create(['lesson_id' => $l7->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>IP Wasting 🗑️</h3><p>Bayangkan FLSM itu memotong kue ukuran 100 potong untuk semua orang. Padahal ada orang yang cuma butuh 2 potong (Link WAN). Sisanya 98 terbuang!</p>']);
+
+                Module::create(['lesson_id' => $l7->id, 'type' => 'quiz', 'order' => 2, 'data' => json_encode([
+                    'question' => 'Apa kelemahan utama FLSM?',
+                    'options' => ['Terlalu sulit', 'Banyak IP terbuang (Wasting)', 'Tidak didukung router', 'Hanya untuk IPv6'],
+                    'answer' => 'Banyak IP terbuang (Wasting)'
+                ])]);
+
+            // --- LEVEL 3.2: LOGIKA VLSM ---
+            $l8 = Lesson::create(['week_id' => $week3->id, 'title' => 'Logika VLSM', 'slug' => 'logika-vlsm', 'order' => 2, 'xp_reward' => 250]);
+
+                Module::create(['lesson_id' => $l8->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Solusi: Potongan Beda Ukuran 🧩</h3><p>VLSM (Variable Length) membolehkan kita memotong subnet dengan ukuran berbeda-beda sesuai kebutuhan.</p>']);
+
+                Module::create(['lesson_id' => $l8->id, 'type' => 'text', 'order' => 2, 'content' =>
+                    '<h3>Aturan Emas 🥇</h3><p>Selalu urutkan kebutuhan dari yang <strong>TERBESAR</strong> ke yang <strong>TERKECIL</strong> sebelum mulai menghitung.</p>']);
+
+            // --- LEVEL 3.3: SIMULATOR VLSM (FINAL) ---
+            $l9 = Lesson::create(['week_id' => $week3->id, 'title' => 'Laboratorium VLSM', 'slug' => 'lab-vlsm', 'order' => 3, 'xp_reward' => 500]);
+
+                Module::create(['lesson_id' => $l9->id, 'type' => 'text', 'order' => 1, 'content' =>
+                    '<h3>Tantangan Terakhir 🏆</h3><p>Gunakan simulator di sebelah kanan. Masukkan kebutuhan ruangan yang berbeda-beda (misal: Lab 60 PC, Guru 10 PC, Server 2 PC). Lihat bagaimana VLSM menghemat IP.</p>']);
+
+                // Simulator Utama
+                Module::create(['lesson_id' => $l9->id, 'type' => 'simulator_vlsm', 'order' => 2, 'content' => 'Simulator Area']);
     }
 }

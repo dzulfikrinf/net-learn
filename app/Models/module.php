@@ -11,14 +11,14 @@ class Module extends Model
 
     protected $guarded = [];
 
-    // Relasi: Modul milik Satu Level
+    // --- INI YANG WAJIB ADA ---
+    protected $casts = [
+        'data' => 'array', // <--- KUNCI PERBAIKANNYA
+    ];
+    // --------------------------
+
     public function lesson()
     {
         return $this->belongsTo(Lesson::class);
     }
-
-    // Casting kolom 'data' agar otomatis jadi JSON/Array saat diambil
-    protected $casts = [
-        'data' => 'array',
-    ];
 }

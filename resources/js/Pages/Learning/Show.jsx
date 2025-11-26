@@ -1,26 +1,41 @@
 import React, { useState, useEffect } from "react";
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import {
     FaArrowLeft,
     FaCheckCircle,
     FaDesktop,
+    FaListUl,
     FaTimesCircle,
     FaChevronRight,
     FaRedo,
 } from "react-icons/fa";
-import confetti from "canvas-confetti"; // Opsional: Efek konfeti kalau benar (npm install canvas-confetti dulu kalo mau)
-import VlsmSimulator from "@/Components/VlsmSimulator";
+import TeacherAssistant from "@/Components/TeacherAssistant";
+import SubnetVisualizerWrapper from "@/Components/Visualizer/SubnetVisualizerWrapper";
+import confetti from "canvas-confetti";
+import ReactMarkdown from "react-markdown";
 
-export default function Show({ lesson, next_lesson_url }) {
+export default function Show({ auth, lesson, next_lesson_url }) {
     // --- STATE ---
     const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
-    const [selectedOption, setSelectedOption] = useState(null); // Jawaban yg dipilih user
-    const [quizStatus, setQuizStatus] = useState("idle"); // 'idle', 'correct', 'incorrect'
+    const [selectedOption, setSelectedOption] = useState(null);
+    const [quizStatus, setQuizStatus] = useState("idle");
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     const currentModule = lesson.modules[currentModuleIndex];
     const isLastModule = currentModuleIndex === lesson.modules.length - 1;
 
-    // Reset state setiap kali pindah modul/slide
+    // --- PERBAIKAN DISINI: Parsing JSON Manual (Jaga-jaga kalau Laravel kirim string) ---
+    let quizData = currentModule.data;
+    try {
+        if (typeof quizData === "string") {
+            quizData = JSON.parse(quizData);
+        }
+    } catch (e) {
+        console.error("Gagal parsing data kuis", e);
+        quizData = {}; // Fallback biar gak error layar putih
+    }
+
+    // Reset state setiap kali pindah modul
     useEffect(() => {
         setSelectedOption(null);
         setQuizStatus("idle");
@@ -28,16 +43,12 @@ export default function Show({ lesson, next_lesson_url }) {
 
     // --- LOGIC: CEK JAWABAN KUIS ---
     const handleOptionClick = (option) => {
-        if (quizStatus === "correct") return; // Kalau sudah benar, gak bisa klik lagi
-
+        if (quizStatus === "correct") return;
         setSelectedOption(option);
-
-        // Ambil kunci jawaban dari database (JSON)
-        const correctAnswer = currentModule.data?.answer;
+        const correctAnswer = quizData?.answer;
 
         if (option === correctAnswer) {
             setQuizStatus("correct");
-            // Efek Hore (Opsional)
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         } else {
             setQuizStatus("incorrect");
@@ -46,7 +57,6 @@ export default function Show({ lesson, next_lesson_url }) {
 
     // --- LOGIC: PINDAH SLIDE ---
     const handleNext = () => {
-        // Validasi: Kalau ini Kuis, harus jawab benar dulu baru boleh lanjut!
         if (currentModule.type === "quiz" && quizStatus !== "correct") {
             alert("Selesaikan kuis dengan jawaban benar dulu ya!");
             return;
@@ -55,18 +65,28 @@ export default function Show({ lesson, next_lesson_url }) {
         if (!isLastModule) {
             setCurrentModuleIndex((prev) => prev + 1);
         } else {
-            // TODO: Nanti di sini kita kirim request ke Backend untuk simpan progress
-            alert("Level Selesai! XP Ditambahkan.");
-            window.location.href = next_lesson_url;
+            if (confirm("Yakin ingin menyelesaikan level ini?")) {
+                router.post(
+                    route("learning.complete", lesson.id),
+                    {},
+                    {
+                        onSuccess: () => {},
+                    }
+                );
+            }
         }
     };
 
+    console.log("Data Modul Saat Ini:", currentModule);
+    console.log("Isi Data Kuis:", currentModule.data);
+
     return (
-        <div className="h-screen flex flex-col bg-slate-50 font-sans overflow-hidden text-slate-800">
+        // 1. CONTAINER UTAMA (Layar Penuh, Tidak Scroll di Body)
+        <div className="h-screen flex flex-col bg-slate-50 font-sans overflow-hidden text-slate-800 relative">
             <Head title={lesson.title} />
 
-            {/* HEADER */}
-            <header className="h-16 bg-white flex items-center justify-between px-6 border-b border-slate-200 shrink-0 z-20">
+            {/* 2. HEADER (Fixed Height) */}
+            <header className="h-16 bg-white flex items-center justify-between px-6 border-b border-slate-200 shrink-0 z-30 shadow-sm">
                 <div className="flex items-center gap-4">
                     <Link
                         href={route("dashboard")}
@@ -86,6 +106,8 @@ export default function Show({ lesson, next_lesson_url }) {
                         </div>
                     </div>
                 </div>
+
+                {/* Progress Bar */}
                 <div className="hidden md:flex flex-col w-1/3">
                     <div className="flex justify-between text-xs mb-1 text-slate-500 font-bold">
                         <span>Progress Belajar</span>
@@ -113,26 +135,72 @@ export default function Show({ lesson, next_lesson_url }) {
                 </div>
             </header>
 
-            {/* MAIN SPLIT SCREEN */}
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                {/* KIRI: MATERI */}
-                <div className="w-full md:w-1/2 p-8 overflow-y-auto bg-white border-r border-slate-200 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10">
-                    <div className="max-w-2xl mx-auto">
+            {/* 3. KONTEN SPLIT SCREEN (Flex Row, Mengisi Sisa Tinggi) */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative h-full">
+                {/* --- KOLOM KIRI: MATERI (Scrollable Independen) --- */}
+                <div
+                    className={`
+                        h-full overflow-y-auto bg-white border-r border-slate-200 z-20 transition-all duration-300
+                        ${
+                            isFullscreen
+                                ? "hidden"
+                                : "w-full md:w-[35%] lg:w-[30%] shrink-0"
+                        }
+                    `}
+                >
+                    <div className="p-6 pb-24">
+                        {" "}
+                        {/* pb-24 biar konten bawah gak ketutup di HP */}
                         <span className="inline-block px-3 py-1 rounded text-xs font-bold bg-blue-50 text-net-blue mb-6 uppercase tracking-wide border border-blue-100">
                             {currentModule.type}
                         </span>
-                        <div className="prose prose-slate prose-lg max-w-none">
-                            <div
-                                dangerouslySetInnerHTML={{
-                                    __html: currentModule.content,
-                                }}
-                            />
+                        <div className="prose prose-slate prose-sm max-w-none">
+                            {/* Render Materi Teks / Kuis */}
+                            {currentModule.type !== "simulator_vlsm" && (
+                                <div
+                                    dangerouslySetInnerHTML={{
+                                        __html: currentModule.content,
+                                    }}
+                                />
+                            )}
+
+                            {/* Instruksi Khusus Simulator */}
+                            {currentModule.type === "simulator_vlsm" && (
+                                <div>
+                                    <h3 className="font-bold text-lg mb-4">
+                                        Panduan Laboratorium
+                                    </h3>
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700 space-y-2">
+                                        <p>
+                                            <strong>1. Input Data:</strong>{" "}
+                                            Masukkan IP Network Induk dan jumlah
+                                            host yang dibutuhkan tiap ruangan.
+                                        </p>
+                                        <p>
+                                            <strong>2. Mulai Hitung:</strong>{" "}
+                                            Klik tombol Mulai untuk memproses.
+                                        </p>
+                                        <p>
+                                            <strong>
+                                                3. Langkah Demi Langkah:
+                                            </strong>{" "}
+                                            Ikuti panduan visualisasi untuk
+                                            melihat bagaimana blok IP dibagi.
+                                        </p>
+                                        <p>
+                                            <strong>4. Hasil Akhir:</strong>{" "}
+                                            Lihat topologi jaringan yang
+                                            terbentuk.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        {/* Mobile Next Button */}
-                        <div className="md:hidden mt-8 pt-8 border-t border-slate-100">
+                        {/* Tombol Navigasi Mobile Only */}
+                        <div className="md:hidden mt-8 pt-4 border-t">
                             <button
                                 onClick={handleNext}
-                                className="w-full py-3 bg-net-blue text-white font-bold rounded-lg shadow-lg active:scale-95 transition"
+                                className="w-full py-3 bg-net-blue text-white font-bold rounded-lg"
                             >
                                 {isLastModule ? "Selesai" : "Selanjutnya"}
                             </button>
@@ -140,158 +208,146 @@ export default function Show({ lesson, next_lesson_url }) {
                     </div>
                 </div>
 
-                {/* KANAN: INTERAKTIF */}
-                <div className="hidden md:flex w-1/2 bg-slate-100 relative flex-col p-4 h-full">
-                    <div className="flex-1 flex items-center justify-center relative">
-                        <div
-                            className="absolute inset-0 opacity-50"
-                            style={{
-                                backgroundImage:
-                                    "radial-gradient(#cbd5e1 2px, transparent 2px)",
-                                backgroundSize: "24px 24px",
-                            }}
-                        ></div>
+                {/* --- KOLOM KANAN: INTERAKTIF (Scrollable Independen & Sticky Footer) --- */}
+                <div
+                    className={`
+                    ${
+                        isFullscreen
+                            ? "w-full"
+                            : "hidden md:flex md:w-[65%] lg:w-[70%]"
+                    }
+                    h-full bg-slate-50 flex flex-col relative transition-all duration-300
+                `}
+                >
+                    {/* Tombol Fullscreen Floating */}
+                    <div className="absolute top-4 right-4 z-40">
+                        <button
+                            onClick={() => setIsFullscreen(!isFullscreen)}
+                            className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 text-slate-500 hover:text-net-blue transition"
+                            title="Toggle Fullscreen"
+                        >
+                            {isFullscreen ? <FaListUl /> : <FaDesktop />}
+                        </button>
+                    </div>
 
-                        <div className="z-10 w-full max-w-md">
-                            {/* TIPE: TEXT (BACAAN SAJA) */}
-                            {currentModule.type === "text" && (
-                                <div className="text-center text-slate-400">
-                                    <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-200">
-                                        <FaDesktop
-                                            size={40}
-                                            className="text-slate-300"
-                                        />
-                                    </div>
-                                    <p className="font-medium text-slate-600">
-                                        Baca materi di sebelah kiri.
-                                    </p>
-                                    <p className="text-sm text-slate-400">
-                                        Klik tombol lanjut jika sudah paham.
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* TIPE: KUIS (INTERAKTIF) */}
-                            {currentModule.type === "quiz" && (
-                                <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50">
-                                    <h3 className="text-net-blue font-bold mb-4 text-xl border-b border-slate-100 pb-4">
-                                        Kuis Pemahaman
-                                    </h3>
-                                    <p className="mb-6 text-lg font-medium text-slate-700">
-                                        {currentModule.data?.question}
-                                    </p>
-
-                                    <div className="space-y-3">
-                                        {currentModule.data?.options?.map(
-                                            (opt, idx) => {
-                                                // Logic Mewarnai Tombol
-                                                let btnClass =
-                                                    "bg-slate-50 border-transparent text-slate-600 hover:bg-blue-50 hover:border-net-blue";
-                                                let icon = null;
-
-                                                // Jika tombol ini dipilih
-                                                if (selectedOption === opt) {
-                                                    if (
-                                                        quizStatus === "correct"
-                                                    ) {
-                                                        btnClass =
-                                                            "bg-green-100 border-green-500 text-green-800 ring-2 ring-green-200"; // Benar
-                                                        icon = (
-                                                            <FaCheckCircle className="text-green-600" />
-                                                        );
-                                                    } else if (
-                                                        quizStatus ===
-                                                        "incorrect"
-                                                    ) {
-                                                        btnClass =
-                                                            "bg-red-100 border-red-500 text-red-800 ring-2 ring-red-200"; // Salah
-                                                        icon = (
-                                                            <FaTimesCircle className="text-red-600" />
+                    {/* AREA KANVAS SIMULATOR (Mengisi ruang, Scrollable jika konten panjang) */}
+                    <div className="flex-1 overflow-y-auto relative p-0">
+                        <div className="min-h-full flex flex-col">
+                            {/* LOGIKA TAMPILAN BERDASARKAN TIPE */}
+                            {currentModule.type === "text" ||
+                            currentModule.type === "quiz" ? (
+                                // Tampilan Placeholder untuk Text/Quiz
+                                <div className="flex-1 flex items-center justify-center p-8">
+                                    {currentModule.type === "quiz" ? (
+                                        // TAMPILAN KUIS
+                                        <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-xl">
+                                            <h3 className="text-net-blue font-bold mb-4 text-xl border-b border-slate-100 pb-4">
+                                                Kuis Pemahaman
+                                            </h3>
+                                            <p className="mb-6 text-lg font-medium text-slate-700">
+                                                {quizData?.question}
+                                            </p>
+                                            <div className="space-y-3">
+                                                {quizData?.options?.map(
+                                                    (opt, idx) => {
+                                                        let btnClass =
+                                                            "bg-slate-50 border-transparent text-slate-600 hover:bg-blue-50 hover:border-net-blue";
+                                                        let icon = null;
+                                                        if (
+                                                            selectedOption ===
+                                                            opt
+                                                        ) {
+                                                            if (
+                                                                quizStatus ===
+                                                                "correct"
+                                                            ) {
+                                                                btnClass =
+                                                                    "bg-green-100 border-green-500 text-green-800 ring-2 ring-green-200";
+                                                                icon = (
+                                                                    <FaCheckCircle className="text-green-600" />
+                                                                );
+                                                            } else if (
+                                                                quizStatus ===
+                                                                "incorrect"
+                                                            ) {
+                                                                btnClass =
+                                                                    "bg-red-100 border-red-500 text-red-800 ring-2 ring-red-200";
+                                                                icon = (
+                                                                    <FaTimesCircle className="text-red-600" />
+                                                                );
+                                                            }
+                                                        }
+                                                        return (
+                                                            <button
+                                                                key={idx}
+                                                                onClick={() =>
+                                                                    handleOptionClick(
+                                                                        opt
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    quizStatus ===
+                                                                    "correct"
+                                                                }
+                                                                className={`w-full text-left px-5 py-4 rounded-xl border transition font-medium group flex justify-between items-center ${btnClass}`}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="inline-block w-6 font-bold text-slate-400">
+                                                                        {String.fromCharCode(
+                                                                            65 +
+                                                                                idx
+                                                                        )}
+                                                                        .
+                                                                    </span>{" "}
+                                                                    {opt}
+                                                                </div>
+                                                                {icon}
+                                                            </button>
                                                         );
                                                     }
-                                                }
-
-                                                return (
-                                                    <button
-                                                        key={idx}
-                                                        onClick={() =>
-                                                            handleOptionClick(
-                                                                opt
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            quizStatus ===
-                                                            "correct"
-                                                        } // Disable kalau sudah benar
-                                                        className={`w-full text-left px-5 py-4 rounded-xl border transition font-medium group flex justify-between items-center ${btnClass}`}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="inline-block w-6 font-bold text-slate-400">
-                                                                {String.fromCharCode(
-                                                                    65 + idx
-                                                                )}
-                                                                .
-                                                            </span>
-                                                            {opt}
-                                                        </div>
-                                                        {icon}
-                                                    </button>
-                                                );
-                                            }
-                                        )}
-                                    </div>
-
-                                    {/* Pesan Feedback */}
-                                    {quizStatus === "incorrect" && (
-                                        <div className="mt-4 text-center text-red-500 font-bold text-sm animate-pulse flex items-center justify-center gap-2">
-                                            <FaRedo /> Jawaban salah, coba lagi!
+                                                )}
+                                            </div>
                                         </div>
-                                    )}
-                                    {quizStatus === "correct" && (
-                                        <div className="mt-4 text-center text-green-600 font-bold text-sm animate-bounce">
-                                            🎉 Jawaban Benar! Silakan lanjut.
+                                    ) : (
+                                        // TAMPILAN PLACEHOLDER TEXT
+                                        <div className="text-center text-slate-400">
+                                            <FaDesktop
+                                                size={64}
+                                                className="mx-auto mb-4 opacity-20"
+                                            />
+                                            <p className="text-lg font-medium">
+                                                Area Baca
+                                            </p>
+                                            <p className="text-sm">
+                                                Silakan baca materi di panel
+                                                sebelah kiri.
+                                            </p>
                                         </div>
                                     )}
                                 </div>
-                            )}
-
-                            {/* TIPE: SIMULATOR */}
-                            {currentModule.type === "simulator_vlsm" && (
-                                // Container Simulator Full Height
-                                <div className="w-full h-full bg-white rounded-xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col">
-                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                            Interactive Lab
-                                        </span>
-                                        <span className="text-xs bg-net-teal text-white px-2 py-0.5 rounded">
-                                            VLSM Mode
-                                        </span>
-                                    </div>
-
-                                    {/* Render Komponen VLSM Disini */}
-                                    <div className="flex-1 relative">
-                                        <VlsmSimulator />
-                                    </div>
-                                </div>
+                            ) : (
+                                // TAMPILAN SIMULATOR (Langsung Render Wrapper)
+                                // Tanpa padding, tanpa margin, full width & height
+                                <SubnetVisualizerWrapper />
                             )}
                         </div>
                     </div>
 
-                    {/* FOOTER KANAN */}
-                    <div className="h-20 border-t border-slate-200 bg-white/80 backdrop-blur flex items-center justify-end px-8">
+                    {/* FOOTER NAVIGASI (Sticky di Bawah Kanan) */}
+                    {/* Ini yang bikin tombol tidak terbang menutupi konten */}
+                    <div className="h-20 bg-white border-t border-slate-200 flex items-center justify-end px-8 shrink-0 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
                         <button
                             onClick={handleNext}
-                            // Disable tombol lanjut jika kuis belum benar (opsional, bisa dihapus disabled-nya kalau mau longgar)
                             disabled={
                                 currentModule.type === "quiz" &&
                                 quizStatus !== "correct"
                             }
-                            className={`flex items-center gap-2 px-8 py-3 font-bold rounded-xl shadow-lg transition transform
+                            className={`flex items-center gap-2 px-6 py-3 font-bold rounded-full shadow-lg transition transform hover:-translate-y-1
                                 ${
                                     currentModule.type === "quiz" &&
                                     quizStatus !== "correct"
-                                        ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                                        : "bg-net-blue text-white shadow-blue-200 hover:bg-blue-700 hover:-translate-y-1"
+                                        ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                        : "bg-net-blue text-white shadow-blue-200 hover:bg-blue-700"
                                 }
                             `}
                         >
@@ -299,6 +355,13 @@ export default function Show({ lesson, next_lesson_url }) {
                             <FaChevronRight size={12} />
                         </button>
                     </div>
+                </div>
+            </div>
+
+            {/* CHATBOT (Fixed di atas segalanya) */}
+            <div className="fixed bottom-40 right-6 z-[100] pointer-events-none">
+                <div className="pointer-events-auto">
+                    <TeacherAssistant user={auth?.user || { name: "Siswa" }} />
                 </div>
             </div>
         </div>

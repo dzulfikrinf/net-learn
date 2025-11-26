@@ -21,6 +21,7 @@ return new class extends Migration
             // --- TAMBAHAN UNTUK SKRIPSI ---
             $table->integer('xp')->default(0); // Poin siswa
             $table->string('role')->default('student'); // 'student' atau 'admin'
+            $table->integer('stars')->default(0);
             // ------------------------------
 
             $table->rememberToken();
