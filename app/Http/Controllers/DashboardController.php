@@ -6,42 +6,60 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\Week; // Pastikan ini ada
 use App\Models\UserProgress;
+use App\Models\Course;
 use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
     // --- FUNGSI INI YANG HILANG TADI ---
-    public function index()
+    public function index($slug = null)
     {
         $user = Auth::user();
 
-        // Ambil ID Level yang sudah diselesaikan user
+        // 1. TENTUKAN COURSE
+        // Jika tidak ada slug (akses /dashboard biasa), kita arahkan ke course default (misal: jarkom)
+        // Atau idealnya diarahkan ke halaman pemilihan course.
+        if (!$slug) {
+             // Opsional: Redirect ke halaman pilih course jika Anda sudah membuatnya
+             // return to_route('course.selection');
+
+             // Untuk sekarang, default ke jarkom biar gak error
+             $slug = 'jarkom';
+        }
+
+        // Cari data Course berdasarkan slug
+        $course = Course::where('slug', $slug)->firstOrFail();
+
+        // 2. AMBIL WEEKS KHUSUS COURSE TERSEBUT (FILTERING)
+        $weeks = Week::where('course_id', $course->id) // <--- INI KUNCINYA
+            ->with(['lessons' => function($query) {
+                $query->orderBy('order', 'asc');
+            }])
+            ->orderBy('week_number', 'asc')
+            ->get();
+
+        // --- Logika Status Unlock & Gamifikasi (Tetap Sama) ---
         $completedLessonIds = UserProgress::where('user_id', $user->id)
             ->where('status', 'completed')
             ->pluck('lesson_id')
             ->toArray();
 
-        // Ambil ID Level yang terbuka (unlocked)
         $unlockedLessonIds = UserProgress::where('user_id', $user->id)
             ->whereIn('status', ['unlocked', 'started'])
             ->pluck('lesson_id')
             ->toArray();
 
-        // PENTING: Level pertama (Minggu 1 Level 1) harus selalu dianggap Unlocked secara default
-        // Kita ambil ID level pertama dari database
-        $firstLesson = \App\Models\Lesson::orderBy('week_id')->orderBy('order')->first();
+        // Unlock level pertama DARI COURSE INI saja
+        $firstLesson = \App\Models\Lesson::whereHas('week', function($q) use ($course) {
+                $q->where('course_id', $course->id);
+            })
+            ->orderBy('week_id')->orderBy('order')->first();
+
         if ($firstLesson && !in_array($firstLesson->id, $unlockedLessonIds) && !in_array($firstLesson->id, $completedLessonIds)) {
              $unlockedLessonIds[] = $firstLesson->id;
         }
 
-        $weeks = Week::with(['lessons' => function($query) {
-            $query->orderBy('order', 'asc');
-        }])
-        ->orderBy('week_number', 'asc')
-        ->get();
-
-        // Kita inject status ke setiap lesson secara manual sebelum dikirim ke React
-        // Ini cara cepat memanipulasi data tanpa merusak struktur database
+        // Inject status
         foreach ($weeks as $week) {
             foreach ($week->lessons as $lesson) {
                 if (in_array($lesson->id, $completedLessonIds)) {
@@ -58,11 +76,13 @@ class DashboardController extends Controller
             'auth' => [
                 'user' => $user
             ],
+            'course' => $course, // Kirim data course untuk Judul Halaman
             'weeks' => $weeks,
             'gamification' => [
                 'xp' => $user->xp,
                 'rank' => 'Novice Networker',
-                'streak' => 1 // Nanti dinamis
+                'stars' => $user->stars,
+                'streak' => 1
             ]
         ]);
     }

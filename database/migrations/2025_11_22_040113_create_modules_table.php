@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('type');
 
             // Isi materi (bisa HTML)
-            $table->text('content')->nullable();
+            $table->longText('content')->nullable();
 
             // Kolom SAKTI: Menyimpan konfigurasi soal/simulator dalam JSON
             $table->json('data')->nullable();

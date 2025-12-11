@@ -1,82 +1,117 @@
 import React from 'react';
 import { Link } from '@inertiajs/react';
-import { FaBook, FaCode, FaCheck, FaLock, FaStar } from 'react-icons/fa';
+import { FaLock, FaPlay, FaMedal, FaCheck } from 'react-icons/fa';
 
-export default function LearningNode({ lesson, isLast }) {
-    const status = lesson.status_user || 'locked'; // Default locked
-
+export default function LearningNode({ lesson, isLast, position = 'center', nextPosition = 'center' }) {
+    const status = lesson.status_user || 'locked';
     const isCompleted = status === 'completed';
     const isUnlocked = status === 'unlocked';
-    const isLocked = status === 'locked';
-
     const isActive = isUnlocked;
-    // -------------------------------------------
 
-    let bgClass = "bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed"; // Default Locked
+    // --- 1. LOGIKA POSISI (HANYA ANGKA 0-100) ---
+    // Jangan pakai tanda %, cukup angkanya saja.
+    // Left = 25, Center = 50, Right = 75
+    const getX = (pos) => {
+        if (pos === 'left') return 25;
+        if (pos === 'right') return 75;
+        return 50;
+    };
+
+    const currentX = getX(position);
+    const nextX = getX(nextPosition);
+
+    // --- 2. LOGIKA WARNA & STYLE ---
+    let btnClass = "bg-white border-4 border-slate-200 shadow-sm";
+    let iconClass = "text-slate-300";
     let Icon = FaLock;
-    let glowClass = "";
+    let strokeColor = "#cbd5e1";
+    let lineStyle = "stroke-dashed";
 
     if (isCompleted) {
-        // HIJAU (Selesai)
-        bgClass = "bg-green-500 border-green-700 text-white cursor-pointer hover:-translate-y-1";
+        btnClass = "bg-gradient-to-b from-green-400 to-green-600 border-4 border-green-200 shadow-xl shadow-green-200/50 z-10 scale-110";
+        iconClass = "text-white drop-shadow-md text-2xl";
         Icon = FaCheck;
-        glowClass = "shadow-[0_0_15px_rgba(34,197,94,0.4)]";
+        strokeColor = "#4ade80";
+        lineStyle = "";
     } else if (isUnlocked) {
-        // BIRU (Sedang Aktif / Next)
-        bgClass = "bg-net-blue border-blue-700 text-white cursor-pointer hover:-translate-y-1 animate-bounce-slow";
-        Icon = lesson.type === 'quiz' ? FaStar : FaBook;
-        glowClass = "shadow-[0_0_20px_rgba(64,112,173,0.4)]";
+        btnClass = "bg-gradient-to-b from-blue-400 to-blue-600 border-4 border-blue-200 shadow-xl shadow-blue-200/50 scale-110 z-10 animate-bounce-slow";
+        iconClass = "text-white drop-shadow-md text-xl pl-1";
+        Icon = FaPlay;
+        strokeColor = "#cbd5e1";
     }
 
+    const linkHref = status !== 'locked' ? route('learning.show', lesson.slug) : '#';
+
     return (
-        <div className="flex flex-col items-center relative z-10">
+        <div className="relative w-full h-36 flex justify-center">
 
-            {/* GARIS KABEL PENGHUBUNG KE BAWAH */}
+            {/* === 3. KABEL SVG (Menggunakan Koordinat Angka) === */}
             {!isLast && (
-                <div className="absolute top-10 bottom-[-4rem] w-2 bg-slate-200 -z-10 rounded-full overflow-hidden">
-                    {/* Efek 'cairan' mengalir HANYA jika level ini sudah selesai (mengalir ke bawah) */}
-                    {isCompleted && <div className="w-full h-full bg-green-400 mx-auto rounded-full opacity-50"></div>}
+                <svg
+                    className="absolute top-10 left-0 w-full h-36 -z-10 pointer-events-none"
+                    // viewBox membuat angka 0-100 menjadi relatif terhadap lebar layar
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                >
+                    <path
+                        // Disini kita pakai angka murni (currentX), bukan persen
+                        d={`M ${currentX} 15 C ${currentX} 60, ${nextX} 40, ${nextX} 100`}
+                        fill="none"
+                        stroke={strokeColor}
+                        strokeWidth="1.5" // Karena viewBox kecil (100), strokeWidth juga kecil
+                        vectorEffect="non-scaling-stroke"
+                        strokeLinecap="round"
+                        className={`transition-all duration-1000 ${lineStyle === 'stroke-dashed' ? 'opacity-40' : 'opacity-100'}`}
+                        strokeDasharray={lineStyle === 'stroke-dashed' ? "4,4" : "none"}
+                    />
 
-                    {/* Atau jika sedang aktif (biru mengalir sedikit) */}
-                    {isActive && <div className="w-full h-1/2 bg-net-blue mx-auto rounded-full opacity-30 blur-sm"></div>}
-                </div>
+                    {isActive && (
+                        <circle r="1" fill="#60a5fa">
+                            <animateMotion
+                                dur="1.5s"
+                                repeatCount="indefinite"
+                                path={`M ${currentX} 15 C ${currentX} 60, ${nextX} 40, ${nextX} 100`}
+                            />
+                        </circle>
+                    )}
+                </svg>
             )}
 
-            {/* WRAPPER TOMBOL */}
-            <div className="relative group my-6">
+            {/* === 4. TOMBOL NODE (Menggunakan CSS Persen) === */}
+            <div
+                className="absolute top-0 transition-all duration-500 z-10"
+                // Di sini kita tambahkan '%' secara manual agar CSS mengerti
+                style={{ left: `${currentX}%`, transform: 'translateX(-50%)' }}
+            >
+                <div className="relative group">
+                    <Link
+                        href={linkHref}
+                        className={`
+                            w-20 h-20 rounded-full flex items-center justify-center
+                            transition-all duration-300 ease-in-out relative
+                            ${btnClass}
+                            ${status === 'locked' ? 'cursor-not-allowed opacity-80 hover:bg-slate-50' : 'hover:scale-115 cursor-pointer'}
+                        `}
+                    >
+                        <Icon className={`${iconClass} transition-transform duration-300 group-hover:rotate-12`} />
+                        <div className="absolute top-2 right-4 w-3 h-3 bg-white opacity-30 rounded-full blur-[2px]"></div>
+                    </Link>
 
-                {/* Label Judul (Tooltip Desktop) */}
-                <div className="absolute left-24 top-4 w-48 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden md:block z-20">
-                    <div className="bg-white px-3 py-2 rounded-xl shadow-lg border border-slate-100 text-sm font-bold text-slate-700 relative">
-                        {lesson.title}
-                        <div className="text-xs text-orange-500 font-normal">+{lesson.xp_reward} XP</div>
-                        {/* Segitiga penunjuk */}
-                        <div className="absolute top-3 -left-2 w-4 h-4 bg-white transform rotate-45 border-l border-b border-slate-100"></div>
+                    <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-48 text-center">
+                        <div className={`text-xs font-bold px-3 py-1.5 rounded-xl border shadow-sm inline-block transition-colors duration-300
+                            ${isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'}
+                        `}>
+                            {lesson.title}
+                        </div>
                     </div>
-                </div>
 
-                {/* TOMBOL NODE UTAMA */}
-                <Link
-                    href={isLocked ? '#' : route('learning.show', lesson.slug)}
-                    className={`w-20 h-20 flex items-center justify-center rounded-3xl border-b-[6px] transition-all duration-200 ${bgClass} ${glowClass}`}
-                >
-                    <Icon size={28} />
-                </Link>
-
-                {/* BADGE "START" (Hanya muncul di level yg sedang dikerjakan/unlocked) */}
-                {isActive && (
-                    <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 z-20">
-                        <span className="bg-orange-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md uppercase tracking-wider border-2 border-white animate-pulse">
-                            Start
-                        </span>
-                    </div>
-                )}
-            </div>
-
-            {/* Judul Mobile */}
-            <div className="md:hidden text-center mb-8 max-w-[150px]">
-                <div className={`text-xs font-bold ${isActive ? 'text-net-blue' : 'text-slate-600'}`}>
-                    {lesson.title}
+                    {isActive && (
+                        <div className="absolute -top-4 -right-4 z-20 animate-bounce">
+                            <span className="bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-lg border-2 border-white uppercase tracking-wider">
+                                START
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

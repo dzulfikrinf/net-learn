@@ -5,9 +5,12 @@ import {
     FaUserGraduate,
     FaSignOutAlt,
     FaKey,
+    FaBook,
+    FaArrowRight
 } from "react-icons/fa"; // Tambah FaKey
+import ApexChart from 'react-apexcharts';
 
-export default function AdminDashboard({ auth, students }) {
+export default function AdminDashboard({ auth, students, charts}) {
     const handleReset = (id, name) => {
         if (
             confirm(
@@ -23,25 +26,29 @@ export default function AdminDashboard({ auth, students }) {
             <Head title="Teacher Dashboard" />
 
             {/* NAVBAR */}
-            <nav className="bg-net-blue text-white px-8 py-4 flex justify-between items-center shadow-lg">
+            <nav className="bg-net-blue text-white px-8 py-4 flex justify-between items-center shadow-lg sticky top-0 z-50">
                 <div className="flex items-center gap-3">
                     <FaChalkboardTeacher size={24} />
-                    <span className="font-bold text-xl">
-                        NetLearn{" "}
-                        <span className="font-normal opacity-80">
-                            | Teacher Panel
-                        </span>
-                    </span>
+                    <span className="font-bold text-xl">NetLearn <span className="font-normal opacity-80 text-sm">| Teacher Panel</span></span>
                 </div>
-                <div className="flex items-center gap-6">
-                    <span className="text-sm">Halo, {auth.user.name}</span>
+
+                <div className="flex items-center gap-4">
+
+                    {/* --- TOMBOL MENU BARU --- */}
                     <Link
-                        href={route("logout")}
-                        method="post"
-                        as="button"
-                        className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded text-sm font-bold transition"
+                        href={route('admin.content.index')}
+                        className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-bold transition border border-white/20"
                     >
-                        Logout
+                        <FaBook /> Manajemen Kurikulum
+                    </Link>
+                    {/* ------------------------ */}
+
+                    <div className="h-6 w-px bg-white/20 mx-2"></div>
+
+                    <span className="text-sm font-medium hidden md:inline">Halo, {auth.user.name}</span>
+
+                    <Link href={route('logout')} method="post" as="button" className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-sm font-bold transition shadow-md hover:shadow-lg flex items-center gap-2">
+                        <FaSignOutAlt /> Logout
                     </Link>
                 </div>
             </nav>
@@ -60,6 +67,73 @@ export default function AdminDashboard({ auth, students }) {
                     <div className="bg-white px-4 py-2 rounded shadow text-sm">
                         Total Siswa: <strong>{students.length}</strong>
                     </div>
+                </div>
+
+                {/* === SECTION GRAFIK (DATA VISUALIZATION) === */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+                    {/* GRAFIK 1: TREN AKTIVITAS (Area Chart) */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-net-blue rounded-full"></span>
+                            Aktivitas Belajar (7 Hari Terakhir)
+                        </h3>
+                        <ApexChart
+                            options={{
+                                chart: { type: 'area', toolbar: { show: false } },
+                                colors: ['#4070ad'],
+                                stroke: { curve: 'smooth' },
+                                xaxis: { categories: charts.activity.map(d => d.date) },
+                                dataLabels: { enabled: false },
+                                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.2, stops: [0, 90, 100] } }
+                            }}
+                            series={[{ name: 'Materi Selesai', data: charts.activity.map(d => d.count) }]}
+                            type="area"
+                            height={300}
+                        />
+                    </div>
+
+                    {/* GRAFIK 2: PENYELESAIAN MATERI (Bar Chart) */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-net-teal rounded-full"></span>
+                            Total Penyelesaian per Materi
+                        </h3>
+                        <ApexChart
+                            options={{
+                                chart: { type: 'bar', toolbar: { show: false } },
+                                colors: ['#45b0ac'],
+                                plotOptions: { bar: { borderRadius: 4, horizontal: false } },
+                                xaxis: { categories: charts.completion.map(d => d.title), labels: { show: false } }, // Label disembunyikan biar gak penuh
+                                tooltip: { x: { show: true } } // Nama materi muncul pas di-hover
+                            }}
+                            series={[{ name: 'Siswa Lulus', data: charts.completion.map(d => d.count) }]}
+                            type="bar"
+                            height={300}
+                        />
+                    </div>
+
+                    {/* GRAFIK 3: TINGKAT KESULITAN (Horizontal Bar) - Full Width */}
+                    <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-orange-400 rounded-full"></span>
+                            Analisis Kesulitan (Rata-rata Percobaan)
+                        </h3>
+                        <p className="text-xs text-slate-400 mb-4">*Semakin panjang bar, semakin sulit materi tersebut bagi siswa.</p>
+                        <ApexChart
+                            options={{
+                                chart: { type: 'bar', toolbar: { show: false } },
+                                colors: ['#fb923c'], // Orange
+                                plotOptions: { bar: { borderRadius: 4, horizontal: true } },
+                                xaxis: { categories: charts.difficulty.map(d => d.title) },
+                                dataLabels: { enabled: true, formatter: (val) => val + "x" }
+                            }}
+                            series={[{ name: 'Rata-rata Percobaan', data: charts.difficulty.map(d => d.avg) }]}
+                            type="bar"
+                            height={350}
+                        />
+                    </div>
+
                 </div>
 
                 {/* TABLE CARD */}

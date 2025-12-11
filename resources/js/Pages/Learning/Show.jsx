@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Head, Link, router } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import {
     FaArrowLeft,
     FaCheckCircle,
@@ -8,43 +8,47 @@ import {
     FaTimesCircle,
     FaChevronRight,
     FaRedo,
+    FaBookOpen,
+    FaInfoCircle,
+    FaChevronLeft
 } from "react-icons/fa";
 import TeacherAssistant from "@/Components/TeacherAssistant";
 import SubnetVisualizerWrapper from "@/Components/Visualizer/SubnetVisualizerWrapper";
 import confetti from "canvas-confetti";
-import ReactMarkdown from "react-markdown";
+import axios from 'axios';
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Show({ auth, lesson, next_lesson_url }) {
     // --- STATE ---
     const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState(null);
     const [quizStatus, setQuizStatus] = useState("idle");
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [showSimInstructions, setShowSimInstructions] = useState(true);
 
     const currentModule = lesson.modules[currentModuleIndex];
     const isLastModule = currentModuleIndex === lesson.modules.length - 1;
+    const isSimulator = currentModule.type === 'simulator_vlsm' || currentModule.type === 'simulator_flsm';
 
-    // --- PERBAIKAN DISINI: Parsing JSON Manual (Jaga-jaga kalau Laravel kirim string) ---
-    let quizData = currentModule.data;
-    try {
-        if (typeof quizData === "string") {
-            quizData = JSON.parse(quizData);
-        }
-    } catch (e) {
-        console.error("Gagal parsing data kuis", e);
-        quizData = {}; // Fallback biar gak error layar putih
-    }
+    // --- 1. START TIMER ---
+    useEffect(() => {
+        axios.post(route('learning.start', lesson.id)).catch(console.error);
+    }, []);
 
-    // Reset state setiap kali pindah modul
+    // Reset state
     useEffect(() => {
         setSelectedOption(null);
         setQuizStatus("idle");
+        if (isSimulator) setShowSimInstructions(true);
     }, [currentModuleIndex]);
 
-    // --- LOGIC: CEK JAWABAN KUIS ---
+    // --- LOGIC KUIS ---
     const handleOptionClick = (option) => {
         if (quizStatus === "correct") return;
         setSelectedOption(option);
+
+        let quizData = currentModule.data;
+        if (typeof quizData === 'string') try { quizData = JSON.parse(quizData); } catch(e){}
+
         const correctAnswer = quizData?.answer;
 
         if (option === correctAnswer) {
@@ -52,10 +56,11 @@ export default function Show({ auth, lesson, next_lesson_url }) {
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         } else {
             setQuizStatus("incorrect");
+            axios.post(route('learning.fail', lesson.id));
         }
     };
 
-    // --- LOGIC: PINDAH SLIDE ---
+    // --- LOGIC NEXT ---
     const handleNext = () => {
         if (currentModule.type === "quiz" && quizStatus !== "correct") {
             alert("Selesaikan kuis dengan jawaban benar dulu ya!");
@@ -66,304 +71,245 @@ export default function Show({ auth, lesson, next_lesson_url }) {
             setCurrentModuleIndex((prev) => prev + 1);
         } else {
             if (confirm("Yakin ingin menyelesaikan level ini?")) {
-                router.post(
-                    route("learning.complete", lesson.id),
-                    {},
-                    {
-                        onSuccess: () => {},
-                    }
-                );
+                router.post(route("learning.complete", lesson.id));
             }
         }
     };
 
-    console.log("Data Modul Saat Ini:", currentModule);
-    console.log("Isi Data Kuis:", currentModule.data);
+    const backLink = lesson.week?.course?.slug
+        ? route('course.map', lesson.week.course.slug)
+        : route('dashboard');
+
+    let moduleConfig = {};
+    try {
+        if (currentModule.data && typeof currentModule.data === 'string') {
+            moduleConfig = JSON.parse(currentModule.data);
+        } else if (currentModule.data) {
+            moduleConfig = currentModule.data;
+        }
+    } catch (e) {}
 
     return (
-        // 1. CONTAINER UTAMA (Layar Penuh, Tidak Scroll di Body)
         <div className="h-screen flex flex-col bg-slate-50 font-sans overflow-hidden text-slate-800 relative">
             <Head title={lesson.title} />
 
-            {/* 2. HEADER (Fixed Height) */}
-            <header className="h-16 bg-white flex items-center justify-between px-6 border-b border-slate-200 shrink-0 z-30 shadow-sm">
+            {/* HEADER (Fixed) */}
+            <header className="h-16 bg-white flex items-center justify-between px-6 border-b border-slate-200 shrink-0 z-30 shadow-sm relative">
                 <div className="flex items-center gap-4">
-                    <Link
-                        href={route("dashboard")}
-                        className="p-2 bg-slate-100 text-slate-600 rounded-full hover:bg-net-blue hover:text-white transition"
-                    >
+                    <Link href={backLink} className="p-2 bg-slate-100 text-slate-600 rounded-full hover:bg-net-blue hover:text-white transition">
                         <FaArrowLeft />
                     </Link>
                     <div>
-                        <h1 className="font-bold text-lg leading-tight text-slate-800">
-                            {lesson.title}
-                        </h1>
+                        <h1 className="font-bold text-lg leading-tight text-slate-800">{lesson.title}</h1>
                         <div className="text-xs text-slate-500 flex items-center gap-2">
-                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-bold">
-                                Modul {currentModuleIndex + 1} /{" "}
-                                {lesson.modules.length}
+                             <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-bold uppercase text-[10px]">
+                                {currentModule.type.replace('_', ' ')}
                             </span>
+                            <span>• Modul {currentModuleIndex + 1} / {lesson.modules.length}</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Progress Bar */}
                 <div className="hidden md:flex flex-col w-1/3">
                     <div className="flex justify-between text-xs mb-1 text-slate-500 font-bold">
                         <span>Progress Belajar</span>
-                        <span>
-                            {Math.round(
-                                ((currentModuleIndex + 1) /
-                                    lesson.modules.length) *
-                                    100
-                            )}
-                            %
-                        </span>
+                        <span>{Math.round(((currentModuleIndex + 1) / lesson.modules.length) * 100)}%</span>
                     </div>
                     <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
-                        <div
-                            className="bg-net-teal h-full transition-all duration-500"
-                            style={{
-                                width: `${
-                                    ((currentModuleIndex + 1) /
-                                        lesson.modules.length) *
-                                    100
-                                }%`,
-                            }}
-                        ></div>
+                        <div className="bg-net-teal h-full transition-all duration-500" style={{ width: `${((currentModuleIndex + 1) / lesson.modules.length) * 100}%` }}></div>
                     </div>
                 </div>
             </header>
 
-            {/* 3. KONTEN SPLIT SCREEN (Flex Row, Mengisi Sisa Tinggi) */}
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative h-full">
-                {/* --- KOLOM KIRI: MATERI (Scrollable Independen) --- */}
-                <div
-                    className={`
-                        h-full overflow-y-auto bg-white border-r border-slate-200 z-20 transition-all duration-300
-                        ${
-                            isFullscreen
-                                ? "hidden"
-                                : "w-full md:w-[35%] lg:w-[30%] shrink-0"
-                        }
-                    `}
-                >
-                    <div className="p-6 pb-24">
-                        {" "}
-                        {/* pb-24 biar konten bawah gak ketutup di HP */}
-                        <span className="inline-block px-3 py-1 rounded text-xs font-bold bg-blue-50 text-net-blue mb-6 uppercase tracking-wide border border-blue-100">
-                            {currentModule.type}
-                        </span>
-                        <div className="prose prose-slate prose-sm max-w-none">
-                            {/* Render Materi Teks / Kuis */}
-                            {currentModule.type !== "simulator_vlsm" && (
-                                <div
-                                    dangerouslySetInnerHTML={{
-                                        __html: currentModule.content,
-                                    }}
-                                />
-                            )}
+            {/* CONTENT AREA */}
+            <div className="flex-1 relative overflow-hidden bg-slate-100 h-full">
 
-                            {/* Instruksi Khusus Simulator */}
-                            {currentModule.type === "simulator_vlsm" && (
-                                <div>
-                                    <h3 className="font-bold text-lg mb-4">
-                                        Panduan Laboratorium
-                                    </h3>
-                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-slate-700 space-y-2">
-                                        <p>
-                                            <strong>1. Input Data:</strong>{" "}
-                                            Masukkan IP Network Induk dan jumlah
-                                            host yang dibutuhkan tiap ruangan.
-                                        </p>
-                                        <p>
-                                            <strong>2. Mulai Hitung:</strong>{" "}
-                                            Klik tombol Mulai untuk memproses.
-                                        </p>
-                                        <p>
-                                            <strong>
-                                                3. Langkah Demi Langkah:
-                                            </strong>{" "}
-                                            Ikuti panduan visualisasi untuk
-                                            melihat bagaimana blok IP dibagi.
-                                        </p>
-                                        <p>
-                                            <strong>4. Hasil Akhir:</strong>{" "}
-                                            Lihat topologi jaringan yang
-                                            terbentuk.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
+                {/* --- MODE SIMULATOR (FULLSCREEN) --- */}
+                {isSimulator ? (
+                    <div className="w-full h-full relative flex flex-col">
+                        <div className="flex-1 relative z-0">
+                            <SubnetVisualizerWrapper
+                                moduleType={currentModule.type} // Kirim tipe (simulator_vlsm / simulator_flsm)
+                                config={(() => {
+                                    try {
+                                        return typeof currentModule.data === 'string'
+                                            ? JSON.parse(currentModule.data)
+                                            : currentModule.data;
+                                    } catch (e) { return {}; }
+                                })()}
+                            />
                         </div>
-                        {/* Tombol Navigasi Mobile Only */}
-                        <div className="md:hidden mt-8 pt-4 border-t">
-                            <button
-                                onClick={handleNext}
-                                className="w-full py-3 bg-net-blue text-white font-bold rounded-lg"
-                            >
-                                {isLastModule ? "Selesai" : "Selanjutnya"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
 
-                {/* --- KOLOM KANAN: INTERAKTIF (Scrollable Independen & Sticky Footer) --- */}
-                <div
-                    className={`
-                    ${
-                        isFullscreen
-                            ? "w-full"
-                            : "hidden md:flex md:w-[65%] lg:w-[70%]"
-                    }
-                    h-full bg-slate-50 flex flex-col relative transition-all duration-300
-                `}
-                >
-                    {/* Tombol Fullscreen Floating */}
-                    <div className="absolute top-4 right-4 z-40">
-                        <button
-                            onClick={() => setIsFullscreen(!isFullscreen)}
-                            className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 text-slate-500 hover:text-net-blue transition"
-                            title="Toggle Fullscreen"
+                        {/* === PANDUAN LAB (DRAGGABLE WRAPPER) === */}
+                        {/* Wrapper ini yang menyimpan posisi X/Y */}
+                        <motion.div
+                            drag
+                            dragMomentum={false} // Agar diam saat dilepas
+                            // Posisi awal
+                            initial={{ x: 20, y: 20 }}
+                            className="absolute z-20"
                         >
-                            {isFullscreen ? <FaListUl /> : <FaDesktop />}
-                        </button>
-                    </div>
-
-                    {/* AREA KANVAS SIMULATOR (Mengisi ruang, Scrollable jika konten panjang) */}
-                    <div className="flex-1 overflow-y-auto relative p-0">
-                        <div className="min-h-full flex flex-col">
-                            {/* LOGIKA TAMPILAN BERDASARKAN TIPE */}
-                            {currentModule.type === "text" ||
-                            currentModule.type === "quiz" ? (
-                                // Tampilan Placeholder untuk Text/Quiz
-                                <div className="flex-1 flex items-center justify-center p-8">
-                                    {currentModule.type === "quiz" ? (
-                                        // TAMPILAN KUIS
-                                        <div className="w-full max-w-lg bg-white p-8 rounded-2xl border border-slate-200 shadow-xl">
-                                            <h3 className="text-net-blue font-bold mb-4 text-xl border-b border-slate-100 pb-4">
-                                                Kuis Pemahaman
+                            <AnimatePresence mode="wait">
+                                {showSimInstructions ? (
+                                    // KONDISI 1: PANEL TERBUKA
+                                    <motion.div
+                                        key="panel"
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.9 }}
+                                        className="w-80 bg-white/95 backdrop-blur shadow-2xl rounded-xl border border-slate-200 flex flex-col max-h-[500px]"
+                                    >
+                                        {/* Header (Handle Drag) */}
+                                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50 rounded-t-xl cursor-grab active:cursor-grabbing">
+                                            <h3 className="font-bold text-slate-700 flex items-center gap-2 select-none">
+                                                <FaBookOpen className="text-net-blue"/> Panduan Lab
                                             </h3>
-                                            <p className="mb-6 text-lg font-medium text-slate-700">
-                                                {quizData?.question}
-                                            </p>
-                                            <div className="space-y-3">
-                                                {quizData?.options?.map(
-                                                    (opt, idx) => {
-                                                        let btnClass =
-                                                            "bg-slate-50 border-transparent text-slate-600 hover:bg-blue-50 hover:border-net-blue";
-                                                        let icon = null;
-                                                        if (
-                                                            selectedOption ===
-                                                            opt
-                                                        ) {
-                                                            if (
-                                                                quizStatus ===
-                                                                "correct"
-                                                            ) {
-                                                                btnClass =
-                                                                    "bg-green-100 border-green-500 text-green-800 ring-2 ring-green-200";
-                                                                icon = (
-                                                                    <FaCheckCircle className="text-green-600" />
-                                                                );
-                                                            } else if (
-                                                                quizStatus ===
-                                                                "incorrect"
-                                                            ) {
-                                                                btnClass =
-                                                                    "bg-red-100 border-red-500 text-red-800 ring-2 ring-red-200";
-                                                                icon = (
-                                                                    <FaTimesCircle className="text-red-600" />
-                                                                );
+                                            {/* Stop Propagation di tombol tutup biar ga dikira nge-drag */}
+                                            <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={() => setShowSimInstructions(false)} className="text-slate-400 hover:text-red-500">
+                                                <FaTimesCircle />
+                                            </button>
+                                        </div>
+
+                                        {/* Konten (Stop Propagation biar bisa scroll/select text) */}
+                                        <div
+                                            className="p-5 overflow-y-auto text-sm text-slate-600 space-y-3 prose prose-sm cursor-auto"
+                                            onPointerDownCapture={(e) => e.stopPropagation()}
+                                        >
+                                            <div dangerouslySetInnerHTML={{ __html: currentModule.content || "<p>Ikuti langkah simulasi di area kerja.</p>" }} />
+                                        </div>
+                                    </motion.div>
+                                ) : (
+                                    // KONDISI 2: TOMBOL MINIMIZE (ICON)
+                                    <motion.button
+                                        key="button"
+                                        initial={{ opacity: 0, scale: 0 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0 }}
+                                        onClick={() => setShowSimInstructions(true)}
+                                        className="bg-white p-3 rounded-full shadow-lg text-net-blue hover:scale-110 transition border border-blue-100 cursor-grab active:cursor-grabbing"
+                                        title="Buka Panduan"
+                                    >
+                                        <FaInfoCircle size={24} />
+                                    </motion.button>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
+                        {/* ========================================= */}
+
+                        {/* Footer Simulator */}
+                        <div className="absolute bottom-0 w-full h-20 bg-gradient-to-t from-white via-white/90 to-transparent flex items-center justify-between px-8 z-10 pointer-events-none">
+                             {/* ... (Isi Footer Tetap Sama) ... */}
+                             <div className="pointer-events-auto">
+                                <button onClick={() => setCurrentModuleIndex(prev => Math.max(0, prev - 1))} disabled={currentModuleIndex === 0} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition bg-white/80 px-4 py-2 rounded-lg shadow-sm border border-slate-200">
+                                    <FaChevronLeft /> Sebelumnya
+                                </button>
+                            </div>
+                            <div className="pointer-events-auto">
+                                <button onClick={handleNext} className="flex items-center gap-2 px-8 py-3 bg-net-blue text-white font-bold rounded-full shadow-xl hover:bg-blue-700 transition transform">
+                                    {isLastModule ? 'Selesai Level' : 'Lanjut Materi'} <FaChevronRight />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    // ... (Bagian Layout B / Teks Tetap Sama) ...
+                    <div className="h-full w-full overflow-y-auto custom-scrollbar relative">
+
+                        {/* Wrapper Center */}
+                        <div className="min-h-full flex justify-center pb-40 pt-6"> {/* pb-40 agar konten paling bawah tidak ketutup footer & chatbot */}
+                            <div className="w-full max-w-4xl bg-white shadow-xl border border-slate-200 rounded-2xl p-8 md:p-12 animate-fade-in-up mx-4">
+
+                                {/* 1. MATERI BACAAN */}
+                                <div className="prose prose-lg max-w-none prose-slate
+                                    prose-headings:text-net-blue
+                                    prose-a:text-blue-600
+                                    prose-img:rounded-xl prose-img:shadow-lg prose-img:mx-auto prose-img:max-h-[500px] prose-img:object-contain">
+
+                                    <div dangerouslySetInnerHTML={{ __html: currentModule.content }} />
+                                </div>
+
+                                {/* 2. KUIS (JIKA ADA) */}
+                                {currentModule.type === 'quiz' && (() => {
+                                    let qData = currentModule.data;
+                                    if (typeof qData === 'string') try { qData = JSON.parse(qData); } catch(e){}
+
+                                    return (
+                                        <div className="mt-12 pt-10 border-t border-slate-100">
+                                            <div className="bg-slate-50 p-6 md:p-8 rounded-2xl border border-slate-200">
+                                                <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-3">
+                                                    <span className="bg-net-teal text-white w-8 h-8 flex items-center justify-center rounded-full text-sm">?</span>
+                                                    Uji Pemahaman
+                                                </h3>
+                                                <p className="text-lg font-medium text-slate-700 mb-6">{qData?.question}</p>
+
+                                                <div className="grid gap-3">
+                                                    {qData?.options?.map((opt, idx) => {
+                                                        let btnClass = "bg-white border-2 border-slate-200 text-slate-600 hover:border-net-blue hover:text-net-blue hover:bg-blue-50";
+                                                        let icon = <div className="w-6 h-6 rounded-full border-2 border-slate-300 text-xs flex items-center justify-center text-slate-400">{String.fromCharCode(65 + idx)}</div>;
+
+                                                        if (selectedOption === opt) {
+                                                            if (quizStatus === 'correct') {
+                                                                btnClass = "bg-green-50 border-2 border-green-500 text-green-700";
+                                                                icon = <FaCheckCircle className="text-green-500 text-xl" />;
+                                                            } else if (quizStatus === 'incorrect') {
+                                                                btnClass = "bg-red-50 border-2 border-red-500 text-red-700";
+                                                                icon = <FaTimesCircle className="text-red-500 text-xl" />;
+                                                            } else {
+                                                                btnClass = "bg-blue-50 border-2 border-net-blue text-net-blue";
                                                             }
                                                         }
+
                                                         return (
                                                             <button
                                                                 key={idx}
-                                                                onClick={() =>
-                                                                    handleOptionClick(
-                                                                        opt
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    quizStatus ===
-                                                                    "correct"
-                                                                }
-                                                                className={`w-full text-left px-5 py-4 rounded-xl border transition font-medium group flex justify-between items-center ${btnClass}`}
+                                                                onClick={() => handleOptionClick(opt)}
+                                                                disabled={quizStatus === 'correct'}
+                                                                className={`w-full text-left px-5 py-4 rounded-xl transition-all font-medium flex justify-between items-center ${btnClass}`}
                                                             >
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className="inline-block w-6 font-bold text-slate-400">
-                                                                        {String.fromCharCode(
-                                                                            65 +
-                                                                                idx
-                                                                        )}
-                                                                        .
-                                                                    </span>{" "}
-                                                                    {opt}
-                                                                </div>
+                                                                <span className="text-lg">{opt}</span>
                                                                 {icon}
                                                             </button>
-                                                        );
-                                                    }
-                                                )}
+                                                        )
+                                                    })}
+                                                </div>
                                             </div>
                                         </div>
-                                    ) : (
-                                        // TAMPILAN PLACEHOLDER TEXT
-                                        <div className="text-center text-slate-400">
-                                            <FaDesktop
-                                                size={64}
-                                                className="mx-auto mb-4 opacity-20"
-                                            />
-                                            <p className="text-lg font-medium">
-                                                Area Baca
-                                            </p>
-                                            <p className="text-sm">
-                                                Silakan baca materi di panel
-                                                sebelah kiri.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                // TAMPILAN SIMULATOR (Langsung Render Wrapper)
-                                // Tanpa padding, tanpa margin, full width & height
-                                <SubnetVisualizerWrapper />
-                            )}
+                                    );
+                                })()}
+                            </div>
                         </div>
                     </div>
+                )}
+            </div>
 
-                    {/* FOOTER NAVIGASI (Sticky di Bawah Kanan) */}
-                    {/* Ini yang bikin tombol tidak terbang menutupi konten */}
-                    <div className="h-20 bg-white border-t border-slate-200 flex items-center justify-end px-8 shrink-0 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-                        <button
-                            onClick={handleNext}
-                            disabled={
-                                currentModule.type === "quiz" &&
-                                quizStatus !== "correct"
+            {/* === 3. FOOTER NAVIGASI (Sticky - Hanya muncul di Mode Baca) === */}
+            {!isSimulator && (
+                <div className="h-20 bg-white border-t border-slate-200 flex items-center justify-between px-8 shrink-0 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                     <button
+                        onClick={() => setCurrentModuleIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentModuleIndex === 0}
+                        className="flex items-center gap-2 text-slate-400 hover:text-slate-600 disabled:opacity-30 font-bold transition"
+                    >
+                        <FaChevronLeft /> Sebelumnya
+                    </button>
+
+                    <button
+                        onClick={handleNext}
+                        disabled={currentModule.type === 'quiz' && quizStatus !== 'correct'}
+                        className={`flex items-center gap-2 px-8 py-3 font-bold rounded-full shadow-lg transition-all transform hover:-translate-y-1 active:scale-95
+                            ${currentModule.type === 'quiz' && quizStatus !== 'correct'
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                : 'bg-gradient-to-r from-net-blue to-blue-600 text-white shadow-blue-200 hover:shadow-blue-300'
                             }
-                            className={`flex items-center gap-2 px-6 py-3 font-bold rounded-full shadow-lg transition transform hover:-translate-y-1
-                                ${
-                                    currentModule.type === "quiz" &&
-                                    quizStatus !== "correct"
-                                        ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                                        : "bg-net-blue text-white shadow-blue-200 hover:bg-blue-700"
-                                }
-                            `}
-                        >
-                            {isLastModule ? "Selesai Level" : "Lanjut Materi"}{" "}
-                            <FaChevronRight size={12} />
-                        </button>
-                    </div>
+                        `}
+                    >
+                        {isLastModule ? 'Selesai Level' : 'Lanjut Materi'} <FaChevronRight />
+                    </button>
                 </div>
-            </div>
+            )}
 
-            {/* CHATBOT (Fixed di atas segalanya) */}
-            <div className="fixed bottom-40 right-6 z-[100] pointer-events-none">
-                <div className="pointer-events-auto">
-                    <TeacherAssistant user={auth?.user || { name: "Siswa" }} />
-                </div>
-            </div>
+            {/* === 4. CHATBOT DRAGGABLE (Posisi Default Di Atas Footer) === */}
+            <TeacherAssistant user={auth?.user || { name: 'Siswa' }} className="bottom-28" />
         </div>
     );
 }

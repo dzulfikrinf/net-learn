@@ -9,10 +9,16 @@ class Week extends Model
 {
     use HasFactory;
 
-    // Izinkan semua kolom diisi (biar gampang seeding)
     protected $guarded = [];
 
-    // Relasi: Satu Minggu punya BANYAK Level
+    // --- TAMBAHKAN RELASI INI ---
+    public function course()
+    {
+        // Satu Minggu milik Satu Course
+        return $this->belongsTo(Course::class);
+    }
+    // ----------------------------
+
     public function lessons()
     {
         return $this->hasMany(Lesson::class);

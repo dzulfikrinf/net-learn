@@ -1,40 +1,34 @@
-import React, { useState } from 'react';
+import React from 'react';
 import FlsmVisualizer from './FlsmVisualizer';
 import VlsmVisualizer from './VlsmVisualizer';
 
-export default function SubnetVisualizerWrapper() {
-    const [mode, setMode] = useState('vlsm');
+// Terima props: moduleType (dari database) dan config (manual/auto)
+export default function SubnetVisualizerWrapper({ moduleType, config = {} }) {
+
+    // Ambil mode dari config, default manual
+    const simulationMode = config.mode || 'manual';
 
     return (
-        // UBAH DISINI: min-h-full agar dia memanjang ke bawah kalau kontennya banyak
-        <div className="w-full min-h-full flex flex-col font-sans bg-slate-50">
+        <div className="w-full h-full flex flex-col font-sans bg-slate-50">
 
-            {/* Sticky Header Tab: Nempel di atas saat discroll */}
-            <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md px-6 py-3 border-b border-slate-200 flex flex-wrap gap-4 justify-between items-center">
-                <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Laboratorium Jaringan</span>
-                </div>
-
-                <div className="flex bg-slate-200/50 rounded-lg p-1">
-                    <button
-                        onClick={() => setMode('flsm')}
-                        className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${mode === 'flsm' ? 'bg-white text-net-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        FLSM
-                    </button>
-                    <button
-                        onClick={() => setMode('vlsm')}
-                        className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${mode === 'vlsm' ? 'bg-white text-net-teal shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        VLSM
-                    </button>
+            {/* Header Sederhana (Tanpa Tab Switcher) */}
+            <div className="bg-white px-6 py-3 border-b border-slate-200 flex justify-between items-center shrink-0 z-20">
+                <div className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${simulationMode === 'auto' ? 'bg-purple-500' : 'bg-green-500'} animate-pulse shadow-sm`}></div>
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        {moduleType === 'simulator_flsm' ? 'FLSM Laboratory' : 'VLSM Laboratory'}
+                        <span className="text-slate-400 ml-1">({simulationMode === 'auto' ? 'Demonstrasi Otomatis' : 'Praktikum Manual'})</span>
+                    </span>
                 </div>
             </div>
 
-            {/* Content Area: Padding diatur disini agar lega */}
-            <div className="flex-1 p-4 md:p-8 pb-24"> {/* pb-24 biar konten paling bawah gak ketutup tombol Next */}
-                 {mode === 'flsm' ? <FlsmVisualizer /> : <VlsmVisualizer />}
+            {/* Render sesuai Tipe dari Database */}
+            <div className="flex-1 relative overflow-hidden">
+                 {moduleType === 'simulator_flsm' ? (
+                    <FlsmVisualizer initialMode={simulationMode} />
+                 ) : (
+                    <VlsmVisualizer initialMode={simulationMode} />
+                 )}
             </div>
         </div>
     );

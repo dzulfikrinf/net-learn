@@ -12,19 +12,39 @@ class LearningController extends Controller
     public function show($slug)
     {
         // 1. Cari Level berdasarkan slug
+        // Kita perlu load 'week.course' agar tahu lesson ini milik Course apa (Jarkom/Algo)
         $lesson = Lesson::where('slug', $slug)
-            ->with(['modules' => function($query) {
-                $query->orderBy('order', 'asc'); // Ambil modul urut dari 1, 2, 3...
-            }])
-            ->firstOrFail(); // Kalau gak ketemu, error 404
+            ->with([
+                'week.course', // <--- TAMBAHKAN INI (Eager Loading)
+                'modules' => function($query) {
+                    $query->orderBy('order', 'asc');
+                }
+            ])
+            ->firstOrFail();
 
-        // 2. Cari Level Selanjutnya (untuk tombol "Next Level")
-        $nextLesson = Lesson::where('order', '>', $lesson->order)->orderBy('order', 'asc')->first();
+        // 2. Cari Level Selanjutnya (Logic: Cari order lebih besar di course yang sama)
+        // Kita cari lesson berikutnya secara global urut order
+        $nextLesson = Lesson::where('order', '>', $lesson->order)
+            ->orderBy('order', 'asc')
+            ->first();
 
-        // 3. Kirim ke React
+        // Validasi tambahan: Pastikan next lesson masih satu course (Opsional, tapi aman)
+        // Jika next lesson ternyata milik course lain (misal pindah dari Jarkom ke Algo), kita stop.
+        if ($nextLesson && $nextLesson->week->course_id !== $lesson->week->course_id) {
+            $nextLesson = null;
+        }
+
+        // 3. Tentukan URL Tujuan jika selesai
+        // Ambil slug course dari relasi: Lesson -> Week -> Course
+        $courseSlug = $lesson->week->course->slug;
+        $backToCourseUrl = route('course.map', $courseSlug);
+
+        // 4. Kirim ke React
         return Inertia::render('Learning/Show', [
             'lesson' => $lesson,
-            'next_lesson_url' => $nextLesson ? route('learning.show', $nextLesson->slug) : route('dashboard'),
+            'next_lesson_url' => $nextLesson
+                ? route('learning.show', $nextLesson->slug)
+                : $backToCourseUrl, // <--- GANTI JADI INI
         ]);
     }
 }

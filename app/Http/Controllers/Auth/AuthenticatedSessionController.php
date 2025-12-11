@@ -33,6 +33,14 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // --- LOGIKA REDIRECT KHUSUS ---
+        // Jika yang login adalah Admin, lempar ke Teacher Dashboard
+        if ($request->user()->role === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+        // ------------------------------
+
+        // Jika Siswa, biarkan ke Dashboard default (Pilih Course)
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
